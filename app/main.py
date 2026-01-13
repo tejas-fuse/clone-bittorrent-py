@@ -40,8 +40,22 @@ def decode_bencode_recursive(bencoded_value):
              raise ValueError("Invalid encoded value: unterminated list")
         return result_list, rest[1:]
 
+    elif bencoded_value[0:1] == b"d":
+        result_dict = {}
+        rest = bencoded_value[1:]
+        while rest and rest[0:1] != b"e":
+            key, rest = decode_bencode_recursive(rest)
+            if not isinstance(key, bytes):
+                raise ValueError("Dictionary key must be a string")
+            key = key.decode() # JSON keys must be strings
+            value, rest = decode_bencode_recursive(rest)
+            result_dict[key] = value
+        if not rest:
+            raise ValueError("Invalid encoded value: unterminated dictionary")
+        return result_dict, rest[1:]
+
     else:
-        raise NotImplementedError("Only strings, integers, and lists are supported at the moment")
+        raise NotImplementedError("Only strings, integers, lists, and dictionaries are supported at the moment")
 
 
 def main():
