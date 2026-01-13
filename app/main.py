@@ -79,6 +79,14 @@ def main():
 
         # TODO: Uncomment the code below to pass the first stage
         print(json.dumps(decode_bencode(bencoded_value), default=bytes_to_str))
+    elif command == "info":
+        file_path = sys.argv[2]
+        with open(file_path, "rb") as f:
+            bencoded_content = f.read()
+        
+        torrent_info = decode_bencode(bencoded_content)
+        print(f"Tracker URL: {torrent_info['announce'].decode()}")
+        print(f"Length: {torrent_info['info']['length']}")
     else:
         raise NotImplementedError(f"Unknown command {command}")
 
