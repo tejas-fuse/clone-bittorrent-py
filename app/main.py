@@ -9,19 +9,39 @@ import sys
 # - decode_bencode(b"5:hello") -> b"hello"
 # - decode_bencode(b"10:hello12345") -> b"hello12345"
 def decode_bencode(bencoded_value):
+    value, _ = decode_bencode_recursive(bencoded_value)
+    return value
+
+def decode_bencode_recursive(bencoded_value):
     if chr(bencoded_value[0]).isdigit():
         first_colon_index = bencoded_value.find(b":")
         if first_colon_index == -1:
             raise ValueError("Invalid encoded value")
         length = int(bencoded_value[:first_colon_index])
-        return bencoded_value[first_colon_index+1:first_colon_index+1+length]
+        start_index = first_colon_index + 1
+        end_index = start_index + length
+        if end_index > len(bencoded_value):
+             raise ValueError("String length mismatch")
+        return bencoded_value[start_index:end_index], bencoded_value[end_index:]
+    
     elif bencoded_value[0:1] == b"i":
         end_index = bencoded_value.find(b"e")
         if end_index == -1:
             raise ValueError("Invalid encoded value")
-        return int(bencoded_value[1:end_index])
+        return int(bencoded_value[1:end_index]), bencoded_value[end_index+1:]
+    
+    elif bencoded_value[0:1] == b"l":
+        result_list = []
+        rest = bencoded_value[1:]
+        while rest and rest[0:1] != b"e":
+            value, rest = decode_bencode_recursive(rest)
+            result_list.append(value)
+        if not rest:
+             raise ValueError("Invalid encoded value: unterminated list")
+        return result_list, rest[1:]
+
     else:
-        raise NotImplementedError("Only strings and integers are supported at the moment")
+        raise NotImplementedError("Only strings, integers, and lists are supported at the moment")
 
 
 def main():
