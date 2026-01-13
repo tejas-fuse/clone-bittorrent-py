@@ -1,6 +1,8 @@
 import json
 import sys
 import hashlib
+import requests
+import struct
 
 # import bencodepy - available if you need it!
 # import requests - available if you need it!
@@ -155,6 +157,38 @@ def main():
         pieces = torrent_info['info']['pieces']
         for i in range(0, len(pieces), 20):
             print(pieces[i:i+20].hex())
+    elif command == "peers":
+        file_path = sys.argv[2]
+        with open(file_path, "rb") as f:
+            bencoded_content = f.read()
+        
+        torrent_info = decode_bencode(bencoded_content)
+        tracker_url = torrent_info['announce'].decode()
+        info_bytes = extract_info_bytes(bencoded_content)
+        info_hash = hashlib.sha1(info_bytes).digest()
+        
+        params = {
+            "info_hash": info_hash,
+            "peer_id": "00112233445566778899",
+            "port": 6881,
+            "uploaded": 0,
+            "downloaded": 0,
+            "left": torrent_info['info']['length'],
+            "compact": 1
+        }
+        
+        response = requests.get(tracker_url, params=params)
+        decoded_response = decode_bencode(response.content)
+        # print(f"Decoded response keys: {decoded_response.keys()}", file=sys.stderr)
+        if 'failure reason' in decoded_response:
+             raise Exception(f"Tracker failed: {decoded_response['failure reason'].decode()}")
+        peers_binary = decoded_response['peers']
+        
+        for i in range(0, len(peers_binary), 6):
+            peer = peers_binary[i:i+6]
+            ip = ".".join(str(b) for b in peer[:4])
+            port = struct.unpack("!H", peer[4:])[0]
+            print(f"{ip}:{port}")
     else:
         raise NotImplementedError(f"Unknown command {command}")
 
