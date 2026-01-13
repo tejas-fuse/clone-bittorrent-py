@@ -1,5 +1,6 @@
 import json
 import sys
+import hashlib
 
 # import bencodepy - available if you need it!
 # import requests - available if you need it!
@@ -57,6 +58,26 @@ def decode_bencode_recursive(bencoded_value):
     else:
         raise NotImplementedError("Only strings, integers, lists, and dictionaries are supported at the moment")
 
+def encode_bencode(data):
+    if isinstance(data, int):
+        return f"i{data}e".encode()
+    elif isinstance(data, str):
+        encoded = data.encode()
+        return f"{len(encoded)}:".encode() + encoded
+    elif isinstance(data, bytes):
+        return f"{len(data)}:".encode() + b":" + data
+    elif isinstance(data, list):
+        return b"l" + b"".join(encode_bencode(item) for item in data) + b"e"
+    elif isinstance(data, dict):
+        encoded_items = []
+        for key in sorted(data.keys()):
+             encoded_key = encode_bencode(key)
+             encoded_val = encode_bencode(data[key])
+             encoded_items.append(encoded_key + encoded_val)
+        return b"d" + b"".join(encoded_items) + b"e"
+    else:
+        raise TypeError(f"Type not serializable: {type(data)}")
+
 
 def main():
     command = sys.argv[1]
@@ -87,6 +108,10 @@ def main():
         torrent_info = decode_bencode(bencoded_content)
         print(f"Tracker URL: {torrent_info['announce'].decode()}")
         print(f"Length: {torrent_info['info']['length']}")
+
+        info_bencoded = encode_bencode(torrent_info['info'])
+        info_hash = hashlib.sha1(info_bencoded).hexdigest()
+        print(f"Info Hash: {info_hash}")
     else:
         raise NotImplementedError(f"Unknown command {command}")
 
