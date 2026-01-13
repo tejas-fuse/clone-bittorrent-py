@@ -58,25 +58,62 @@ def decode_bencode_recursive(bencoded_value):
     else:
         raise NotImplementedError("Only strings, integers, lists, and dictionaries are supported at the moment")
 
-def encode_bencode(data):
-    if isinstance(data, int):
-        return f"i{data}e".encode()
-    elif isinstance(data, str):
-        encoded = data.encode()
-        return f"{len(encoded)}:".encode() + encoded
-    elif isinstance(data, bytes):
-        return f"{len(data)}:".encode() + b":" + data
-    elif isinstance(data, list):
-        return b"l" + b"".join(encode_bencode(item) for item in data) + b"e"
-    elif isinstance(data, dict):
-        encoded_items = []
-        for key in sorted(data.keys()):
-             encoded_key = encode_bencode(key)
-             encoded_val = encode_bencode(data[key])
-             encoded_items.append(encoded_key + encoded_val)
-        return b"d" + b"".join(encoded_items) + b"e"
+def find_value_end(data, start_idx):
+    char = data[start_idx:start_idx+1]
+    
+    if chr(data[start_idx]).isdigit():
+        colon_idx = data.find(b':', start_idx)
+        length = int(data[start_idx:colon_idx])
+        return colon_idx + 1 + length
+    
+    elif char == b'i':
+        end_idx = data.find(b'e', start_idx)
+        return end_idx + 1
+    
+    elif char == b'l' or char == b'd':
+        idx = start_idx + 1
+        while idx < len(data):
+            if data[idx:idx+1] == b'e':
+                return idx + 1
+            idx = find_value_end(data, idx)
+        raise ValueError("Unterminated list or dictionary")
+    
     else:
-        raise TypeError(f"Type not serializable: {type(data)}")
+        raise ValueError(f"Unknown start character: {char}")
+
+def extract_info_bytes(bencoded_data):
+    # Assume the root is a dictionary
+    if bencoded_data[0:1] != b'd':
+        raise ValueError("Invalid torrent file: root is not a dictionary")
+    
+    idx = 1
+    while idx < len(bencoded_data):
+        if bencoded_data[idx:idx+1] == b'e':
+            break
+        
+        # Parse Key (must be string)
+        if not chr(bencoded_data[idx]).isdigit():
+             raise ValueError("Dictionary keys must be strings")
+        
+        colon_idx = bencoded_data.find(b':', idx)
+        key_len = int(bencoded_data[idx:colon_idx])
+        key_start = colon_idx + 1
+        key_end = key_start + key_len
+        key = bencoded_data[key_start:key_end]
+        
+        # Move past key
+        idx = key_end
+        
+        # Now we are at the value
+        value_start = idx
+        value_end = find_value_end(bencoded_data, value_start)
+        
+        if key == b'info':
+            return bencoded_data[value_start:value_end]
+        
+        idx = value_end
+        
+    raise ValueError("Info key not found")
 
 
 def main():
@@ -109,8 +146,8 @@ def main():
         print(f"Tracker URL: {torrent_info['announce'].decode()}")
         print(f"Length: {torrent_info['info']['length']}")
 
-        info_bencoded = encode_bencode(torrent_info['info'])
-        info_hash = hashlib.sha1(info_bencoded).hexdigest()
+        info_bytes = extract_info_bytes(bencoded_content)
+        info_hash = hashlib.sha1(info_bytes).hexdigest()
         print(f"Info Hash: {info_hash}")
     else:
         raise NotImplementedError(f"Unknown command {command}")
