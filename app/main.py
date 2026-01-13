@@ -3,6 +3,7 @@ import sys
 import hashlib
 import requests
 import struct
+import socket
 
 # import bencodepy - available if you need it!
 # import requests - available if you need it!
@@ -189,6 +190,39 @@ def main():
             ip = ".".join(str(b) for b in peer[:4])
             port = struct.unpack("!H", peer[4:])[0]
             print(f"{ip}:{port}")
+    elif command == "handshake":
+        file_path = sys.argv[2]
+        peer_address = sys.argv[3]
+        peer_ip, peer_port = peer_address.split(":")
+        peer_port = int(peer_port)
+
+        with open(file_path, "rb") as f:
+            bencoded_content = f.read()
+
+        info_bytes = extract_info_bytes(bencoded_content)
+        info_hash = hashlib.sha1(info_bytes).digest()
+        peer_id = b"00112233445566778899" # 20 bytes
+
+        # Construct handshake message
+        protocol_len = 19
+        protocol_string = b"BitTorrent protocol"
+        reserved_bytes = b"\x00" * 8
+        handshake_msg = bytes([protocol_len]) + protocol_string + reserved_bytes + info_hash + peer_id
+
+        # Connect to peer
+        with socket.create_connection((peer_ip, peer_port)) as s:
+            s.sendall(handshake_msg)
+            
+            # Receive handshake response
+            # Response length should be 1 byte (len) + 19 bytes (protocol) + 8 bytes (reserved) + 20 bytes (info hash) + 20 bytes (peer id) = 68 bytes
+            response = s.recv(68)
+            
+            if len(response) < 68:
+                raise Exception("Invalid handshake response length")
+            
+            received_peer_id = response[48:]
+            print(f"Peer ID: {received_peer_id.hex()}")
+
     else:
         raise NotImplementedError(f"Unknown command {command}")
 
